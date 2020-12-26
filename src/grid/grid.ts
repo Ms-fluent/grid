@@ -12,15 +12,17 @@ import {
   forwardRef,
   Injector,
   Input,
-  IterableChangeRecord, IterableDiffer, IterableDiffers,
+  IterableChangeRecord,
+  IterableDiffer,
+  IterableDiffers,
   ViewChild,
   ViewContainerRef,
-  ViewEncapsulation,
-  ViewRef
+  ViewEncapsulation
 } from '@angular/core';
-import {MsGridItem, MsGridItemContext } from './grid-item';
+import {MsGridItem, MsGridItemContext} from './grid-item';
 import {MsGridJustify} from './grid-options';
 import {MsGridItemDef} from './grid-item-def';
+import * as gsap from 'gsap';
 
 @Component({
   selector: 'ms-grid',
@@ -60,12 +62,48 @@ export class MsGrid<T> implements AfterContentInit, AfterViewInit, DoCheck {
 
   set filterFn(value: (x: T) => boolean) {
     this._filterFn = value;
-    this.applyFilter(value);
+    this.filter(value);
   }
 
-  private _filterFn: (x: T) => boolean;
+  private _filterFn: (x: T) => boolean = (x: T) => true;
+
+  @Input()
+  get sortFn(): (a: T, b: T) => number {
+    return this._sortFn;
+  }
+
+  set sortFn(value: (a: T, b: T) => number) {
+    this._sortFn = value;
+    this.sort(value);
+  }
+
+  private _sortFn: (a: T, b: T) => number = () => 0;
 
 
+  get sortBy(): [string, 'string' | 'number' | 'date'] {
+    return this._sortBy;
+  }
+
+  set sortBy(value: [string, 'string' | 'number' | 'date']) {
+    if (this.sortBy && value[0] === this.sortBy[0] && value[1] === this.sortBy[1]) {
+      this._sortBy = value;
+      this.reverse();
+      return;
+    }
+    if (value[1] === 'number') {
+      this.sortFn = (a: T, b: T) => +a[value[0]] - +b[value[0]];
+    } else if (value[1] === 'string') {
+      this.sortFn = (a: T, b: T) => a[value[0]].toString().localeCompare(b[value[0]].toString());
+    } else if (value[1] === 'date') {
+      this.sortFn = (a: T, b: T) => new Date(a[value[0]]).getDate() - new Date(b[value[0]]).getDate();
+    }
+    this._sortBy = value;
+  }
+
+  private _sortBy: [string, 'string' | 'number' | 'date'];
+
+  /** Initial array of data! */
+  private data: Array<T> = [];
   private items: Array<T> = [];
   private _itemViews: Map<any, ComponentRef<MsGridItem<T>>> = new Map<any, ComponentRef<MsGridItem<T>>>();
   private differ: IterableDiffer<any>;
@@ -83,26 +121,45 @@ export class MsGrid<T> implements AfterContentInit, AfterViewInit, DoCheck {
   }
 
   ngDoCheck(): void {
-    if (this.gridItemDef) {
-      console.log('items change');
-    }
   }
 
   ngAfterViewInit(): void {
-    console.log('View init');
     this.viewContainer.clear();
-    // this.addInitialItem();
-    this.updateGridTemplate();
-    this.gridItemDef.doCheckEvent.subscribe((changes) => {
-      console.log('event change');
-      changes.forEachAddedItem(this.forEachAddedItem);
-      changes.forEachRemovedItem(this.forEachRemovedItem);
-      changes.forEachMovedItem(this.forEachMovedItem);
+    this.differ = this._differs.find(this.items).create();
+    this.data = this.gridItemDef.data;
+    this.items = this.data.slice();
+    this.applyChanges();
+  }
 
-      let index = 0;
-      this._itemViews.forEach(ref => {
-        ref.instance.context.setData(index++, this._itemViews.size);
-      });
+  async applyChanges() {
+    const changes = this.differ.diff(this.items);
+    if (changes == null) {
+      return;
+    }
+    changes.forEachAddedItem(this.forEachAddedItem);
+    changes.forEachRemovedItem(this.forEachRemovedItem);
+    changes.forEachMovedItem(this.forEachMovedItem);
+    this.updateGridTemplate();
+    let index = 0;
+    for (const ref of this._itemViews.values()) {
+      ref.instance.context.setData(index++, this._itemViews.size);
+      this.animateItem(ref.instance);
+    }
+  }
+
+  animateItem(item: MsGridItem<T>): Promise<void> {
+    return new Promise<void>(resolve => {
+      if (!item.coord) {
+        resolve();
+        return;
+      }
+      const x = item.coord.x - item.host.getBoundingClientRect().x;
+      const y = item.coord.y - item.host.getBoundingClientRect().y;
+      item.host.animate([
+        {'transform': `translate(${x}px, ${y}px)`},
+        {'transform': `translate(0)`}
+      ], {fill: 'both', duration: 200, easing: 'ease-in-out'})
+        .onfinish = () => resolve();
 
     });
   }
@@ -127,10 +184,20 @@ export class MsGrid<T> implements AfterContentInit, AfterViewInit, DoCheck {
     }
   };
 
-  addInitialItem() {
-    this.data.forEach((item, index) => {
-      const view = this.createItemView(item, index);
-    });
+  sort(compareFn?: (a: T, b: T) => number) {
+    if (!compareFn) {
+      return;
+    }
+    this.items = this.data.sort(compareFn);
+    this.applyChanges();
+  }
+
+  filter(value: (x: T) => boolean) {
+    if (!value) {
+      return;
+    }
+    this.items = this.data.filter(value);
+    this.applyChanges();
   }
 
   updateGridTemplate() {
@@ -141,7 +208,7 @@ export class MsGrid<T> implements AfterContentInit, AfterViewInit, DoCheck {
   }
 
   createItemView(item: T, index: number): ComponentRef<MsGridItem<T>> {
-    const context = new MsGridItemContext(item, index, this.data.length);
+    const context = new MsGridItemContext(item, index, this.items.length);
     const injector = this._createGridItemInjector(context);
     const componentFactory = this.componentFactoryResolver.resolveComponentFactory<MsGridItem<T>>(MsGridItem);
 
@@ -149,6 +216,7 @@ export class MsGrid<T> implements AfterContentInit, AfterViewInit, DoCheck {
     const node = componentRef.location.nativeElement as HTMLDivElement;
     node.classList.add('ms-gridItem');
     node.style.height = this.itemHeight + 'px';
+    gsap.gsap.from(node, {opacity: 0, y: this.itemHeight, duration: 0.5});
     componentRef.changeDetectorRef.detectChanges();
 
     return componentRef;
@@ -172,14 +240,11 @@ export class MsGrid<T> implements AfterContentInit, AfterViewInit, DoCheck {
     };
   }
 
-  applyFilter(value: (x: T) => boolean) {
-    const itemValues = this.data.filter(value);
-
-  }
-
   getItemPerLine(): number {
     if (this.xGap === 'justify') {
-      return Math.floor(this.width / this.itemWidth);
+      const count = this.width / this.itemWidth;
+      console.log(count, Math.floor(count));
+      return Math.floor(count);
     }
 
     return Math.floor((this.width - this.itemWidth) / (this.itemWidth + +this.xGap)) + 1;
@@ -198,14 +263,16 @@ export class MsGrid<T> implements AfterContentInit, AfterViewInit, DoCheck {
 
   getXGap(): number {
     if (this.xGap === 'justify') {
-      return (this.width - this.getItemPerLine() * this.itemWidth) / (this.getItemPerLine() - 1);
+      // if (this.items.length < this.getItemPerLine()) {
+      //   return ((this.width - this.itemWidth) - (this.items.length - 1) * this.itemWidth) / (this.items.length - 1);
+      // } else {
+      //   return ((this.width - this.itemWidth) - (this.getItemPerLine() - 1) * this.itemWidth) / (this.getItemPerLine() - 1);
+      // }
+      return ((this.width - this.itemWidth) - (this.getItemPerLine() - 1) * this.itemWidth) / (this.getItemPerLine() - 1);
     }
     return this.xGap;
   }
 
-  get data(): Array<T> {
-    return this.gridItemDef.data;
-  }
 
   get host(): HTMLElement {
     return this._elementRef.nativeElement;
@@ -213,5 +280,54 @@ export class MsGrid<T> implements AfterContentInit, AfterViewInit, DoCheck {
 
   get width(): number {
     return this.host.getBoundingClientRect().width;
+  }
+
+  get length(): number {
+    return this.items.length;
+  };
+
+  pop() {
+    this.items.pop();
+    this.applyChanges();
+  }
+
+  shift() {
+    this.items.shift();
+    this.applyChanges();
+  }
+
+  push(...items: T[]) {
+    this.data.push(...items);
+    this.items.push(...items);
+    this.applyChanges();
+  }
+
+  reverse() {
+    this.items.reverse();
+    this.applyChanges();
+  }
+
+  unshift(...items: T[]) {
+    this.data.unshift(...items);
+    this.items.unshift(...items);
+    this.applyChanges();
+  }
+
+  unshiftRange(items: T[]) {
+    this.data.unshift(...items);
+    this.items.unshift(...items);
+    this.applyChanges();
+  }
+
+  remove(...items: T[]) {
+    this.data = this.data.filter(item => items.indexOf(item) < 0);
+    this.items = this.items.filter(item => items.indexOf(item) < 0);
+    this.applyChanges();
+  }
+
+  clear() {
+    this.data = [];
+    this.items = [];
+    this.applyChanges();
   }
 }

@@ -9,8 +9,27 @@
   <button (click)="filter('Actinide')">Actinide</button>
 </div>
 
-<ms-grid xGap="justify" [itemHeight]="150">
-  <div *msGridItemDef="let item of elements; let i=index" >
+<div>
+  <button (click)="msGrid.pop()">Pop</button>
+  <button (click)="msGrid.shift()">Shift</button>
+  <button (click)="msGrid.reverse()">Reverse</button>
+  <button (click)="msGrid.clear()">Clear()</button>
+  <button (click)="msGrid.unshiftRange(data)">Restore()</button>
+
+</div>
+
+<div>
+  <button (click)="msGrid.reverse()">Reverse</button>
+  <button (click)="msGrid.sortBy = ['id', 'number']">Id</button>
+  <button (click)="msGrid.sortBy = ['name', 'string']">Name</button>
+  <button (click)="msGrid.sortBy = ['position', 'number']">Position</button>
+  <button (click)="msGrid.sortBy = ['weight', 'number']">Weight</button>
+  <button (click)="msGrid.sortBy = ['symbol', 'string']">Symbol</button>
+  <button (click)="msGrid.sortBy = ['type', 'string']">Type</button>
+</div>
+
+<ms-grid xGap="justify" [itemHeight]="150" #msGrid>
+  <div *msGridItemDef="let item of elements; let i=index" style="background: #FFF">
     <div style="font-size: 28px">
       {{item.symbol}}
     </div>
@@ -22,6 +41,10 @@
     </div>
     <div>
       Index: {{i}}
+    </div>
+
+    <div>
+      <span style="cursor: pointer; color: blue" (click)="msGrid.remove(item)">supprimer</span>
     </div>
 
     <div style="color: #3399FF">{{item.type}}</div>

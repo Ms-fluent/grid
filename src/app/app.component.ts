@@ -1,5 +1,6 @@
-import {Component, OnInit} from '@angular/core';
+import {Component, OnInit, ViewChild} from '@angular/core';
 import {ELEMENT_DATA, PeriodicElement} from '../element';
+import {MsGrid} from '../grid';
 
 @Component({
   selector: 'app-root',
@@ -8,13 +9,21 @@ import {ELEMENT_DATA, PeriodicElement} from '../element';
 })
 export class AppComponent implements OnInit {
   title = 'fluent-grid';
-  elements: PeriodicElement[] = ELEMENT_DATA.slice(0, 10);
+  data = ELEMENT_DATA.slice();
+  elements: PeriodicElement[] = ELEMENT_DATA;
   of: any;
+
+  @ViewChild('msGrid')
+  msGrid: MsGrid<PeriodicElement>;
 
   ngOnInit(): void {
   }
 
+  getFilterFn(type: string): (x: PeriodicElement) => boolean {
+    return (x: PeriodicElement) => x.type === type;
+  }
+
   filter(category: string) {
-    this.elements = ELEMENT_DATA.filter(e => e.type === category);
+    this.msGrid.filter(this.getFilterFn(category))
   }
 }

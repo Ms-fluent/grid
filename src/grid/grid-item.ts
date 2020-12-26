@@ -1,13 +1,4 @@
-import {
-  AfterViewInit,
-  ChangeDetectionStrategy,
-  ChangeDetectorRef,
-  Component,
-  ElementRef,
-  ViewChild,
-  ViewContainerRef,
-  ViewEncapsulation
-} from '@angular/core';
+import {AfterViewInit, ChangeDetectionStrategy, Component, ElementRef, ViewChild, ViewContainerRef, ViewEncapsulation} from '@angular/core';
 import {MsGridItemDef} from './grid-item-def';
 
 export class MsGridItemContext<T> {
@@ -15,6 +6,8 @@ export class MsGridItemContext<T> {
   even: boolean;
   first: boolean;
   last: boolean;
+
+  property = new Map<any, any>();
 
   constructor(public $implicit: T,
               public index: number, total: number) {
@@ -32,8 +25,6 @@ export class MsGridItemContext<T> {
     this.last = index === total - 1;
   }
 }
-
-
 
 
 let _gridItemUniqueId = 0;
@@ -54,14 +45,20 @@ export class MsGridItem<T> implements AfterViewInit {
   @ViewChild('view', {read: ViewContainerRef})
   viewContainer: ViewContainerRef;
 
-  constructor(private elementRef: ElementRef<HTMLElement>,
-              public changeDetectorRef: ChangeDetectorRef,
-              private gridItemDef: MsGridItemDef<T>, public context: MsGridItemContext<T>) {
+  coord: DOMRect;
+
+  constructor(private elementRef: ElementRef<HTMLElement>, private gridItemDef: MsGridItemDef<T>, public context: MsGridItemContext<T>) {
   }
 
   ngAfterViewInit(): void {
     const viewRef = this.viewContainer.createEmbeddedView(this.gridItemDef.template, this.context);
     viewRef.detectChanges();
+
+
+    setTimeout(() => {
+      this.coord = this.host.getBoundingClientRect();
+    }, 100)
+
   }
 
   get host(): HTMLElement {
